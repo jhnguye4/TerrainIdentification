@@ -79,10 +79,13 @@ class BalanceSampler(ClassBalancer):
 
 
 
-def read_csv_file(file_path, as_singles=False):
+def read_csv_file(file_path, as_singles=False, as_string=False):
   lines = []
   with open(file_path) as f:
-    csv_reader = csv.reader(f)
+    if as_string:
+      csv_reader = csv.reader(f)
+    else:
+      csv_reader = csv.reader(f, quoting=csv.QUOTE_NONNUMERIC)
     for line in csv_reader:
       if as_singles:
         lines.append(line[0])
@@ -91,12 +94,20 @@ def read_csv_file(file_path, as_singles=False):
     return lines
 
 
-def get_data_files(base_folder, prefixes, suffix):
+def get_data_files_suffix(base_folder, prefixes, suffix):
   file_paths = []
   for prefix in prefixes:
     file_paths.append(os.path.join(base_folder, "%s%s.csv" % (prefix, suffix)))
   return file_paths
 
+
+def get_data_files(base_folder, prefixes, skip_y=False):
+  return {
+    "x": get_data_files_suffix(base_folder, prefixes, "x"),
+    "y": None if skip_y else get_data_files_suffix(base_folder, prefixes, "y"),
+    "x_time": get_data_files_suffix(base_folder, prefixes, "x_time"),
+    "y_time": get_data_files_suffix(base_folder, prefixes, "y_time")
+  }
 
 
 class SamplingRate:
@@ -138,7 +149,7 @@ class DataStreamer:
       features = read_csv_file(x_file_path)
       self.n_features = len(features[0])
       if self.y_files:
-        self.labels += read_csv_file(self.y_files[file_index], as_singles=True)
+        self.labels += read_csv_file(self.y_files[file_index], as_singles=True, as_string=True)
       if self.x_time_files:
         feature_times = read_csv_file(self.x_time_files[file_index], as_singles=True)
       if self.y_time_files:
@@ -170,7 +181,7 @@ class DataStreamer:
       LOGGER.info("Class Balancing  .... ")
       self.features, self.labels = self.class_balancer.balance(self.features, self.labels)
     self.index = 0
-    print(Counter(self.labels))
+    LOGGER.info("Sampling data: %s" % Counter(self.labels))
 
   def next(self):
     feature_samples = self.features[self.index : self.index + self.batch_size]
