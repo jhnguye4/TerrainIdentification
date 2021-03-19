@@ -45,7 +45,7 @@ sampling_rates = {
 }
 
 
-def runner():
+def logReg_runner():
   for balancer in [data_utils.UnderSampler(), data_utils.BalanceSampler(), data_utils.OverSampler()]:
     for key in sorted(sampling_rates.keys()):
       sampling_rate = sampling_rates[key]
@@ -72,6 +72,18 @@ def runner():
       LOGGER.info("Logistic Regression Validation Score: %s" % validation_score)
       print()
 
+def knn_runner():
+  for balancer in [data_utils.UnderSampler(), data_utils.BalanceSampler(), data_utils.OverSampler()]:
+    for key in sorted(sampling_rates.keys()):
+      sampling_rate = sampling_rates[key]
+      LOGGER.info("Balancer: %s; Sampling Rate: %s" % (balancer.__class__.__name__, key))
+      LOGGER.info("\n#### Training")
+      training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+      training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                                class_balancer=balancer, batch_size=1)
+      train_x = training_stream.features
+      train_y = training_stream.labels
+
       #KNN Model
       knnModel = model_utils.Knn(train_x, train_y)
       knnModel.fit()
@@ -87,6 +99,18 @@ def runner():
       LOGGER.info("KNN Validation Score: %s" % knn_validation_score)
       print()
 
+def nb_runner():
+  for balancer in [data_utils.UnderSampler(), data_utils.BalanceSampler(), data_utils.OverSampler()]:
+    for key in sorted(sampling_rates.keys()):
+      sampling_rate = sampling_rates[key]
+      LOGGER.info("Balancer: %s; Sampling Rate: %s" % (balancer.__class__.__name__, key))
+      LOGGER.info("\n#### Training")
+      training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+      training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                                class_balancer=balancer, batch_size=1)
+      train_x = training_stream.features
+      train_y = training_stream.labels
+
       #Naive Bayes Model
       nbModel = model_utils.NaiveBayes(train_x, train_y)
       nbModel.fit()
@@ -101,4 +125,4 @@ def runner():
       nb_validation_score = nbModel.score(nb_valid_x, nb_valid_y)
       LOGGER.info("Naive Bayes Validation Score: %s" % nb_validation_score)
       print()
-runner()
+logReg_runner()
