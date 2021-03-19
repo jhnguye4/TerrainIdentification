@@ -14,6 +14,7 @@ import model_utils
 import logger
 
 DATA_HOME = properties.DATA_HOME
+TEST_HOME = properties.TEST_HOME
 LOGGER = logger.get_logger(os.path.basename(__file__.split(".")[0]))
 
 
@@ -36,6 +37,11 @@ validation_records = ["subject_001_08__",
                       "subject_006_03__",
                       "subject_007_04__"]
 
+
+test_records = ["subject_009_01__",
+                "subject_010_01__",
+                "subject_011_01__",
+                "subject_012_01__"]
 
 
 sampling_rates = {
@@ -129,6 +135,26 @@ def nb_runner():
       print()
 
 
+def test_runner():
+  sampling_rate = sampling_rates["4"]
+  balancer = data_utils.UnderSampler()
+  training_data_files = data_utils.get_data_files(DATA_HOME, training_records + validation_records)
+  training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                            class_balancer=balancer, batch_size=1)
+  train_x = training_stream.features
+  train_y = training_stream.labels
+  model = model_utils.KNN(train_x, train_y)
+  model.fit()
+  for test_record in test_records:
+    LOGGER.info("Predicting for '%s' ... " % test_record)
+    testing_data_file = data_utils.get_data_files(TEST_HOME, [test_record], skip_y=True)
+    testing_stream = data_utils.DataStreamer(testing_data_file, sample_deltas=sampling_rate, do_shuffle=False)
+    test_x = testing_stream.features
+    y_predicted = model.predict(test_x)
+    test_file_path = os.path.join(TEST_HOME, "%sy_prediction.csv" % test_record)
+    data_utils.dump_labels_to_csv(y_predicted, test_file_path)
 
-knn_runner()
+
+
+test_runner()
 

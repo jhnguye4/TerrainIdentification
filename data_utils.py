@@ -94,6 +94,11 @@ def read_csv_file(file_path, as_singles=False, as_string=False):
     return lines
 
 
+def dump_labels_to_csv(labels, file_path):
+  labels = np.array(list(map(int, labels)))
+  labels.tofile(file_path, sep='\n')
+
+
 def get_data_files_suffix(base_folder, prefixes, suffix):
   file_paths = []
   for prefix in prefixes:
@@ -181,7 +186,8 @@ class DataStreamer:
       LOGGER.info("Class Balancing  .... ")
       self.features, self.labels = self.class_balancer.balance(self.features, self.labels)
     self.index = 0
-    LOGGER.info("Sampling data: %s" % Counter(self.labels))
+    if len(self.labels):
+      LOGGER.info("Sampling data: %s" % Counter(self.labels))
 
   def next(self):
     feature_samples = self.features[self.index : self.index + self.batch_size]

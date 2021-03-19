@@ -13,3 +13,4 @@ COPY THIS FILE AND SET ALL VARIABLES IN THIS FILE APPROPRIATELY.
 """
 
 DATA_HOME = "<set folder for training data>" # eg. Dataset/TrainingData
+TEST_HOME = "<set folder for testing data>" # eg. Dataset/TrainingData
