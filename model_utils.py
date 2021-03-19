@@ -31,7 +31,7 @@ class BaseModel:
 
   def fit(self):
     x = BaseModel.merge(self.x)
-    LOGGER.info("Fitting %s model ... ")
+    LOGGER.info("Fitting %s model ... "  % self.name)
     self.model.fit(x, self.y)
 
   def predict(self, x):

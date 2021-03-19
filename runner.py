@@ -60,7 +60,7 @@ def logReg_runner():
       #Logistic Regression Model
       model = model_utils.LogReg(train_x, train_y)
       model.fit()
-      training_score = model.score(train_x, train_y)
+      training_score = model.f1(train_x, train_y)
       LOGGER.info("Logistic Regression Training Score: %s" % training_score)
       LOGGER.info("\n#### Validation")
       validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
@@ -68,9 +68,10 @@ def logReg_runner():
                                                   class_balancer=None, batch_size=1)
       valid_x = validation_stream.features
       valid_y = validation_stream.labels
-      validation_score = model.score(valid_x, valid_y)
+      validation_score = model.f1(valid_x, valid_y)
       LOGGER.info("Logistic Regression Validation Score: %s" % validation_score)
       print()
+
 
 def knn_runner():
   for balancer in [data_utils.UnderSampler(), data_utils.BalanceSampler(), data_utils.OverSampler()]:
@@ -85,9 +86,9 @@ def knn_runner():
       train_y = training_stream.labels
 
       #KNN Model
-      knnModel = model_utils.Knn(train_x, train_y)
+      knnModel = model_utils.KNN(train_x, train_y)
       knnModel.fit()
-      knn_training_score = knnModel.score(train_x, train_y)
+      knn_training_score = knnModel.f1(train_x, train_y)
       LOGGER.info("KNN Training Score: %s" % knn_training_score)
       LOGGER.info("\n#### Validation")
       knn_validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
@@ -95,9 +96,10 @@ def knn_runner():
                                                   class_balancer=None, batch_size=1)
       knn_valid_x = knn_validation_stream.features
       knn_valid_y = knn_validation_stream.labels
-      knn_validation_score = knnModel.score(knn_valid_x, knn_valid_y)
+      knn_validation_score = knnModel.f1(knn_valid_x, knn_valid_y)
       LOGGER.info("KNN Validation Score: %s" % knn_validation_score)
       print()
+
 
 def nb_runner():
   for balancer in [data_utils.UnderSampler(), data_utils.BalanceSampler(), data_utils.OverSampler()]:
@@ -114,7 +116,7 @@ def nb_runner():
       #Naive Bayes Model
       nbModel = model_utils.NaiveBayes(train_x, train_y)
       nbModel.fit()
-      nb_training_score = nbModel.score(train_x, train_y)
+      nb_training_score = nbModel.f1(train_x, train_y)
       LOGGER.info("Naive Bayes Training Score: %s" % nb_training_score)
       LOGGER.info("\n#### Validation")
       nb_validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
@@ -122,7 +124,11 @@ def nb_runner():
                                                   class_balancer=None, batch_size=1)
       nb_valid_x = nb_validation_stream.features
       nb_valid_y = nb_validation_stream.labels
-      nb_validation_score = nbModel.score(nb_valid_x, nb_valid_y)
+      nb_validation_score = nbModel.f1(nb_valid_x, nb_valid_y)
       LOGGER.info("Naive Bayes Validation Score: %s" % nb_validation_score)
       print()
-logReg_runner()
+
+
+
+knn_runner()
+
