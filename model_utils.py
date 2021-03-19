@@ -9,6 +9,8 @@ __author__ = "bigfatnoob"
 
 import itertools
 from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
 
 import logger
 
@@ -39,4 +41,50 @@ class LogReg:
     LOGGER.info("Scoring Logistic Regression model")
     return self.model.score(x, y)
 
+class Knn:
+  def __init__(self, x, y):
+    self.x = x
+    self.y = y
+    self.model = KNeighborsClassifier(n_neighbors = 3)
 
+  @staticmethod
+  def merge(x):
+    return [list(itertools.chain.from_iterable(x_i)) for x_i in x]
+
+  def fit(self):
+    x = Knn.merge(self.x)
+    LOGGER.info("Fitting KNN Model")
+    self.model.fit(x, self.y)
+
+  def predict(self, x):
+    x = Knn.merge(x)
+    return self.model.predict(x)
+
+  def score(self, x, y):
+    x = Knn.merge(x)
+    LOGGER.info("Scoring KNN Model")
+    return self.model.score(x, y)
+
+class NaiveBayes:
+  def __init__(self, x, y):
+    self.x = x
+    self.y = y
+    self.model = GaussianNB()
+
+  @staticmethod
+  def merge(x):
+    return [list(itertools.chain.from_iterable(x_i)) for x_i in x]
+
+  def fit(self):
+    x = NaiveBayes.merge(self.x)
+    LOGGER.info("Fitting Naive Bayes Model")
+    self.model.fit(x, self.y)
+
+  def predict(self, x):
+    x = NaiveBayes.merge(x)
+    return self.model.predict(x)
+
+  def score(self, x, y):
+    x = NaiveBayes.merge(x)
+    LOGGER.info("Scoring Naive Bayes Model")
+    return self.model.score(x, y)

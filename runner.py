@@ -56,10 +56,12 @@ def runner():
                                                 class_balancer=balancer, batch_size=1)
       train_x = training_stream.features
       train_y = training_stream.labels
+
+      #Logistic Regression Model
       model = model_utils.LogReg(train_x, train_y)
       model.fit()
       training_score = model.score(train_x, train_y)
-      LOGGER.info("Training Score: %s" % training_score)
+      LOGGER.info("Logistic Regression Training Score: %s" % training_score)
       LOGGER.info("\n#### Validation")
       validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
       validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=True,
@@ -67,8 +69,36 @@ def runner():
       valid_x = validation_stream.features
       valid_y = validation_stream.labels
       validation_score = model.score(valid_x, valid_y)
-      LOGGER.info("Validation Score: %s" % validation_score)
+      LOGGER.info("Logistic Regression Validation Score: %s" % validation_score)
       print()
 
+      #KNN Model
+      knnModel = model_utils.Knn(train_x, train_y)
+      knnModel.fit()
+      knn_training_score = knnModel.score(train_x, train_y)
+      LOGGER.info("KNN Training Score: %s" % knn_training_score)
+      LOGGER.info("\n#### Validation")
+      knn_validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+      knn_validation_stream = data_utils.DataStreamer(knn_validation_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                                  class_balancer=None, batch_size=1)
+      knn_valid_x = knn_validation_stream.features
+      knn_valid_y = knn_validation_stream.labels
+      knn_validation_score = knnModel.score(knn_valid_x, knn_valid_y)
+      LOGGER.info("KNN Validation Score: %s" % knn_validation_score)
+      print()
 
+      #Naive Bayes Model
+      nbModel = model_utils.NaiveBayes(train_x, train_y)
+      nbModel.fit()
+      nb_training_score = nbModel.score(train_x, train_y)
+      LOGGER.info("Naive Bayes Training Score: %s" % nb_training_score)
+      LOGGER.info("\n#### Validation")
+      nb_validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+      nb_validation_stream = data_utils.DataStreamer(nb_validation_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                                  class_balancer=None, batch_size=1)
+      nb_valid_x = nb_validation_stream.features
+      nb_valid_y = nb_validation_stream.labels
+      nb_validation_score = nbModel.score(nb_valid_x, nb_valid_y)
+      LOGGER.info("Naive Bayes Validation Score: %s" % nb_validation_score)
+      print()
 runner()
