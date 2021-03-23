@@ -31,11 +31,12 @@ class BaseModel:
 
   def fit(self):
     x = BaseModel.merge(self.x)
-    LOGGER.info("Fitting %s model ... "  % self.name)
+    LOGGER.info("Fitting %s model ... " % self.name)
     self.model.fit(x, self.y)
 
   def predict(self, x):
     x = BaseModel.merge(x)
+    LOGGER.info("Predicting for %s model ... " % self.name)
     return self.model.predict(x)
 
   def score(self, x, y):

@@ -8,6 +8,15 @@ sys.dont_write_bytecode = True
 __author__ = "bigfatnoob"
 
 
+import csv
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+sns.set_theme(style="darkgrid")
+from collections import Counter
+import numpy as np
+from sklearn import metrics
+
 import properties
 import data_utils
 import model_utils
@@ -156,5 +165,129 @@ def test_runner():
 
 
 
-test_runner()
+def test_optimal_k_for_knn():
+  sampling_rate = sampling_rates["4"]
+  balancer = data_utils.UnderSampler()
+  training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+  training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                            class_balancer=balancer, batch_size=1)
+  train_x = training_stream.features
+  train_y = training_stream.labels
+  validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+  validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                              class_balancer=balancer, batch_size=1)
+  valid_x = validation_stream.features
+  valid_y = validation_stream.labels
+  knn_scores = [["k", "f1"]]
+  for k in range(1, 31):
+    model = model_utils.KNN(train_x, train_y, k=k)
+    model.fit()
+    validation_score = model.f1(valid_x, valid_y)
+    knn_scores.append([k, validation_score])
+  knn_scores_file = os.path.join("results", "knn_tuned.csv")
+  with open(knn_scores_file, "w") as f:
+    write = csv.writer(f)
+    write.writerows(knn_scores)
 
+
+def plot_optimal_k():
+  knn_scores_file = os.path.join("results", "knn_tuned.csv")
+  knn_scores_img = os.path.join("results", "knn_tuned.png")
+  data = pd.read_csv(knn_scores_file)
+  fig = sns.lineplot(data=data, x="k", y="f1")
+  fig.set(xlabel = "k (# nearest neighbors)", ylabel="F1 scores")
+  plt.savefig(knn_scores_img)
+  plt.clf()
+
+
+def plot_data_splits():
+  train_valid_split_png = os.path.join("results", "train_valid_split.png")
+  def autolabel(rects):
+    """Attach a text label above each bar in *rects*, displaying its height."""
+    for rect in rects:
+      height = rect.get_height()
+      ax.annotate('{}'.format(height),
+                  xy=(rect.get_x() + rect.get_width() / 2, height),
+                  xytext=(0, 3),  # 3 points vertical offset
+                  textcoords="offset points",
+                  ha='center', va='bottom')
+
+  sampling_rate = sampling_rates["4"]
+  training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+  training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                            class_balancer=None, batch_size=1)
+  train_y = training_stream.labels
+  validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+  validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                              class_balancer=None, batch_size=1)
+  valid_y = validation_stream.labels
+  train_counter = Counter(train_y)
+  valid_counter = Counter(valid_y)
+  labels = sorted(train_counter.keys())
+  train_counts, valid_counts = [], []
+  for label in labels:
+    train_counts.append(train_counter[label])
+    valid_counts.append(valid_counter[label])
+  x = np.arange(len(labels))  # the label locations
+  width = 0.35  # the width of the bars
+  fig, ax = plt.subplots()
+  rects1 = ax.bar(x - width / 2, train_counts, width, label='Training')
+  rects2 = ax.bar(x + width / 2, valid_counts, width, label='Validation')
+  ax.set_ylabel('Label')
+  ax.set_yscale('log')
+  ax.set_title('Frequency of label in training and validation sets')
+  ax.set_xticks(x)
+  ax.set_xticklabels(labels)
+  ax.legend()
+  autolabel(rects1)
+  autolabel(rects2)
+  fig.tight_layout()
+  plt.savefig(train_valid_split_png)
+  plt.clf()
+  LOGGER.info("Chart saved in '%s'" % train_valid_split_png)
+
+
+def output_predicted():
+  sampling_rate = sampling_rates["4"]
+  balancer = data_utils.OverSampler()
+  training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+  training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                            class_balancer=balancer, batch_size=1)
+  train_x = training_stream.features
+  train_y = training_stream.labels
+  model = model_utils.KNN(train_x, train_y, k=3)
+  model.fit()
+  validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+  validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                              class_balancer=None, batch_size=1)
+  valid_x = validation_stream.features
+  valid_y = validation_stream.labels
+  y_predicted = model.predict(valid_x)
+  test_file_path = os.path.join("results", "%s_prediction.csv" % "3nn")
+  data_utils.dump_labels_to_csv(y_predicted, test_file_path)
+
+
+def compute_output_metrics(model_name):
+  sampling_rate = sampling_rates["4"]
+  test_file_path = os.path.join("results", "%s_prediction.csv" % model_name)
+  y_predicted = list(map(int, data_utils.read_csv_file(test_file_path, as_singles=True)))
+  validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+  validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                              class_balancer=None, batch_size=1)
+  valid_y = list(map(int, validation_stream.labels))
+  print(y_predicted[:10])
+  print(valid_y[:10])
+  labels = [0,1,2,3]
+  print(metrics.precision_recall_fscore_support(valid_y, y_predicted, labels=labels))
+  print(metrics.precision_recall_fscore_support(valid_y, y_predicted, labels=labels, average="weighted"))
+  cm = metrics.confusion_matrix(valid_y, y_predicted, labels=labels, normalize='true')
+  disp = metrics.ConfusionMatrixDisplay(cm)
+
+  cm_plt = disp.plot(include_values=True, cmap=plt.cm.Blues, colorbar=True)
+  cm_plt_path = os.path.join("results", "%s_cm.png" % model_name)
+  plt.grid(False)
+  plt.savefig(cm_plt_path)
+  print("Accuracy Score: %f" % metrics.accuracy_score(valid_y, y_predicted))
+
+
+compute_output_metrics("3nn")
