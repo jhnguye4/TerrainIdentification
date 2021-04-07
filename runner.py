@@ -21,6 +21,7 @@ import properties
 import data_utils
 import model_utils
 import logger
+import cache
 
 DATA_HOME = properties.DATA_HOME
 TEST_HOME = properties.TEST_HOME
@@ -39,24 +40,38 @@ training_records = [
                     ]
 
 validation_records = ["subject_001_08__",
-                      "subject_002_05__",
+                      #"subject_002_05__",
                       "subject_003_03__",
-                      "subject_004_02__",
+                      #"subject_004_02__",
                       "subject_005_03__",
-                      "subject_006_03__",
+                      #"subject_006_03__",
                       "subject_007_04__"]
 
 
-test_records = ["subject_009_01__",
-                "subject_010_01__",
-                "subject_011_01__",
-                "subject_012_01__"]
+test_records = [#"subject_001_08__",
+                "subject_002_05__",
+                #"subject_003_03__",
+                "subject_004_02__",
+                #"subject_005_03__",
+                "subject_006_03__",
+                #"subject_007_04__"
+                ]
+
+
+# test_records = ["subject_009_01__",
+#                 "subject_010_01__",
+#                 "subject_011_01__",
+#                 "subject_012_01__"]
 
 
 sampling_rates = {
   "1": data_utils.SamplingRate([-0.02], 0, 0, 4),
-  "2": data_utils.SamplingRate([-0.045, -0.02], 0, 1, 2),
-  "4": data_utils.SamplingRate([-0.07, -0.045, -0.02, 0.005], 0, 1, 0)
+  "2": data_utils.SamplingRate([-0.045, -0.02], 0, 1, 4),
+  "4": data_utils.SamplingRate([-0.07, -0.045, -0.02, 0.005], -2, 1, 4),
+  "6": data_utils.SamplingRate([-0.12, -0.095, -0.07, -0.045, -0.02, 0.005], -4, 1, 4),
+  "10": data_utils.SamplingRate([-0.22, -0.195, -0.17, -0.145, -0.12, -0.095, -0.07, -0.045, -0.02, 0.005], -8, 1, 4),
+  "30": data_utils.SamplingRate([-0.72, -0.695, -0.67, -0.645, -0.62, -0.595, -0.57, -0.545, -0.52, -0.495, -0.47, -0.445, -0.42, -0.395, -0.37, -0.345, -0.32, -0.295, -0.27, -0.245, -0.22, -0.195, -0.17, -0.145, -0.12, -0.095, -0.07, -0.045, -0.02, 0.005], -28, 1, 4),
+  "60": data_utils.SamplingRate([-1.47, -1.445, -1.42, -1.395, -1.37, -1.345, -1.32, -1.295, -1.27, -1.245, -1.22, -1.195, -1.17, -1.145, -1.12, -1.095, -1.07, -1.045, -1.02, -0.995, -0.97, -0.945, -0.92, -0.895, -0.87, -0.845, -0.82, -0.795, -0.77, -0.745, -0.72, -0.695, -0.67, -0.645, -0.62, -0.595, -0.57, -0.545, -0.52, -0.495, -0.47, -0.445, -0.42, -0.395, -0.37, -0.345, -0.32, -0.295, -0.27, -0.245, -0.22, -0.195, -0.17, -0.145, -0.12, -0.095, -0.07, -0.045, -0.02, 0.005], -58, 1, 4)
 }
 
 
@@ -290,4 +305,73 @@ def compute_output_metrics(model_name):
   print("Accuracy Score: %f" % metrics.accuracy_score(valid_y, y_predicted))
 
 
-compute_output_metrics("3nn")
+def preview_data_features():
+  sampling_rate = sampling_rates["4"]
+  data_files = data_utils.get_data_files(DATA_HOME, training_records + validation_records)
+  stream = data_utils.DataStreamer(data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                            class_balancer=None, batch_size=1)
+  features = stream.features
+  data_list = []
+  for feature_set, label in zip(features, stream.labels):
+    label = str(int(label))
+    for feature in feature_set:
+      f_sum = sum(feature)
+      feature = list(feature)
+      if f_sum <= data_utils.FLOAT_ERROR:
+        continue
+      data_list.append(feature + [label])
+  print(len(data_list))
+  feature_names = [0, 1, 2, 3, 4, 5]
+  classes = ["0", "1", "2", "3"]
+  df_names = feature_names + ["class"]
+  df = pd.DataFrame(data_list, columns=df_names)
+  grouped = df.groupby('class')
+  for clazz in classes:
+    print("Class: %s " % clazz)
+    df = grouped.get_group(clazz)
+    print(df.mean())
+    print(df.std())
+    print("*" * 20)
+
+  # plt.savefig(os.path.join("results","data_hist.png"))
+
+
+def lstm_runner():
+  sample_rate_key = "30"
+  model_path = os.path.join("models/simple_lstm_%s.mdl")
+  if cache.file_exists(model_path):
+    model_utils.SimpleLSTM.load(model_path)
+    exit()
+  batch_size = 32
+  n_epochs = 20
+  sampling_rate = sampling_rates[sample_rate_key]
+  # balancer = data_utils.OverSampler()
+  balancer = None
+  training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+  training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                            class_balancer=balancer, batch_size=1)
+  train_x, train_y, train_sample_weights = training_stream.preprocess()
+  validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+  validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                              class_balancer=None, batch_size=1)
+  valid_x, valid_y, valid_sample_weights = validation_stream.preprocess(n_classes=len(training_stream.classes))
+  lstm = model_utils.SimpleLSTM((train_x, train_y, train_sample_weights), (valid_x, valid_y, valid_sample_weights),
+                                sampling_rate.window_size, training_stream.n_features,
+                                len(training_stream.classes), batch_size=batch_size, epochs=n_epochs)
+  lstm.model.summary()
+  lstm.fit()
+  lstm.save(model_path)
+
+
+def test():
+  sampling_rate = sampling_rates["4"]
+  data_files = data_utils.get_data_files(DATA_HOME, training_records + validation_records)
+  stream = data_utils.DataStreamer(data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                   class_balancer=None, batch_size=1)
+  x, y = stream.preprocess()
+  print(x)
+  print(y)
+
+
+lstm_runner()
+# compute_output_metrics("3nn")

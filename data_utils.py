@@ -10,9 +10,10 @@ __author__ = "bigfatnoob"
 import csv
 import numpy as np
 from collections import Counter
-from sklearn.utils import shuffle
+from sklearn.utils import shuffle, class_weight
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.over_sampling import RandomOverSampler
+from keras.utils import to_categorical
 
 import logger
 
@@ -116,15 +117,17 @@ def get_data_files(base_folder, prefixes, skip_y=False):
 
 
 class SamplingRate:
-  def __init__(self, intervals, x_start, x_skip, sample_skip):
+  def __init__(self, intervals, x_start, window_skip, step_size):
     self.intervals = intervals
     self.x_start = x_start
-    self.x_skip = x_skip
-    self.sample_skip = sample_skip
+    self.window_skip = window_skip
+    self.step_size = step_size
+    self.window_size = len(intervals)
 
 
 class DataStreamer:
-  def __init__(self, data_files, sample_deltas=None, do_shuffle=False, class_balancer=None, batch_size=1):
+  def __init__(self, data_files, sample_deltas=None, do_shuffle=False,
+               class_balancer=None, batch_size=1, n_labels=None):
     self.x_files = data_files["x"]
     self.y_files = data_files.get("y", None)
     self.x_time_files = data_files.get("x_time", None)
@@ -142,6 +145,9 @@ class DataStreamer:
     self.label_histogram = None
     self.batch_size = batch_size
     self.index = None
+    self.sample_weights = None
+    self.class_weights = None
+    self.classes = None
     self.initialize()
 
   def initialize(self):
@@ -164,15 +170,28 @@ class DataStreamer:
       for y_index, y_time in enumerate(label_times):
         y_time = float(y_time)
         samples = []
+        window_index = max(x_index, 0)
         for delta in self.sample_deltas.intervals:
-          x_time = float(feature_times[x_index])
-          if x_index < len(feature_times) and abs(y_time + delta - x_time) <= FLOAT_ERROR:
-            samples.append(features[x_index])
-            x_index += self.sample_deltas.x_skip
+          x_time = float(feature_times[window_index])
+          if window_index < len(feature_times) and abs(y_time + delta - x_time) <= FLOAT_ERROR:
+            samples.append(features[window_index])
+            window_index += self.sample_deltas.window_skip
           else:
             samples.append([0.0] * len(features[0]))
-        x_index += self.sample_deltas.sample_skip
+        x_index += self.sample_deltas.step_size
         self.features.append(samples)
+      # for y_index, y_time in enumerate(label_times):
+      #   y_time = float(y_time)
+      #   samples = []
+      #   for delta in self.sample_deltas.intervals:
+      #     x_time = float(feature_times[x_index])
+      #     if x_index < len(feature_times) and abs(y_time + delta - x_time) <= FLOAT_ERROR:
+      #       samples.append(features[x_index])
+      #       x_index += self.sample_deltas.x_skip
+      #     else:
+      #       samples.append([0.0] * len(features[0]))
+      #   x_index += self.sample_deltas.sample_skip
+      #   self.features.append(samples)
     self.features = np.array(self.features)
     if len(self.labels):
       self.labels = np.array(self.labels)
@@ -187,6 +206,10 @@ class DataStreamer:
       self.features, self.labels = self.class_balancer.balance(self.features, self.labels)
     self.index = 0
     if len(self.labels):
+      cntr = Counter(self.labels)
+      self.classes = sorted(cntr.keys())
+      self.sample_weights = class_weight.compute_sample_weight("balanced", y=self.labels)
+      self.class_weights = class_weight.compute_class_weight("balanced", classes=self.classes, y=self.labels)
       LOGGER.info("Sampling data: %s" % Counter(self.labels))
 
   def next(self):
@@ -194,4 +217,15 @@ class DataStreamer:
     label_samples = self.labels[self.index : self.index + self.batch_size] if self.labels is not None else None
     self.index += self.batch_size
     return feature_samples, label_samples
+
+  def preprocess(self, n_classes=None):
+    if n_classes is None:
+      n_classes = len(self.classes)
+    x = np.array(self.features)
+    y = to_categorical(self.labels, n_classes)
+    return x, y, self.sample_weights
+
+  def generate(self):
+    x = np.zeros((self.batch_size, self.n_features))
+    y = np.zeros((self.batch_size, self.n_features))
 
