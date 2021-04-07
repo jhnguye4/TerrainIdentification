@@ -13,7 +13,7 @@ from collections import Counter
 from sklearn.utils import shuffle, class_weight
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.over_sampling import RandomOverSampler
-from keras.utils import to_categorical
+from tensorflow.keras.utils import to_categorical
 
 import logger
 
