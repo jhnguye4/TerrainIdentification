@@ -134,7 +134,7 @@ class BiDirectionalLSTM(BaseModel):
       BaseModel.__init__(self, train[0], train[1])
     else:
       BaseModel.__init__(self, None, None)
-    self.name = "Simple LSTM" if name is None else self.name
+    self.name = "BiDirectional LSTM" if name is None else self.name
     self.n_classes = n_classes
     self.sample_weights = train[2] if train else None
     self.valid_x = valid[0] if valid else None
@@ -155,8 +155,7 @@ class BiDirectionalLSTM(BaseModel):
       self.model = None
 
   def fit(self):
-    validation_data = (self.valid_x, self.valid_y, self.valid_weights) if self.valid_weights is not None else (
-    self.valid_x, self.valid_y)
+    validation_data = (self.valid_x, self.valid_y, self.valid_weights) if self.valid_weights is not None else (self.valid_x, self.valid_y)
     self.model.fit(self.x, self.y, sample_weight=self.sample_weights, batch_size=self.batch_size, epochs=self.epochs,
                    validation_data=validation_data, validation_batch_size=self.batch_size)
 

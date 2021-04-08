@@ -388,8 +388,8 @@ def bilstm_runner():
     lstm = model_utils.BiDirectionalLSTM((train_x, train_y, train_sample_weights), (valid_x, valid_y, valid_sample_weights),
                                   sampling_rate.window_size, training_stream.n_features,
                                   len(training_stream.classes), batch_size=batch_size, epochs=n_epochs)
-    lstm.model.summary()
     lstm.fit()
+    lstm.model.summary()
     lstm.save(model_path)
 
 
