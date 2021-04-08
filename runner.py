@@ -364,6 +364,35 @@ def lstm_runner():
     lstm.save(model_path)
 
 
+
+def bilstm_runner():
+  for sample_rate_key in ["4", "6", "10", "30", "60"]:
+    LOGGER.info("Processing for window size = %s" % sample_rate_key)
+    model_path = os.path.join("models/bi_lstm_%s.mdl" % sample_rate_key)
+    if cache.file_exists(model_path):
+      model_utils.BiDirectionalLSTM.load(model_path)
+      continue
+    batch_size = 32
+    n_epochs = 20
+    sampling_rate = sampling_rates[sample_rate_key]
+    # balancer = data_utils.OverSampler()
+    balancer = None
+    training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+    training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                              class_balancer=balancer, batch_size=1)
+    train_x, train_y, train_sample_weights = training_stream.preprocess()
+    validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+    validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                                class_balancer=None, batch_size=1)
+    valid_x, valid_y, valid_sample_weights = validation_stream.preprocess(n_classes=len(training_stream.classes))
+    lstm = model_utils.BiDirectionalLSTM((train_x, train_y, train_sample_weights), (valid_x, valid_y, valid_sample_weights),
+                                  sampling_rate.window_size, training_stream.n_features,
+                                  len(training_stream.classes), batch_size=batch_size, epochs=n_epochs)
+    lstm.model.summary()
+    lstm.fit()
+    lstm.save(model_path)
+
+
 def test():
   sampling_rate = sampling_rates["4"]
   data_files = data_utils.get_data_files(DATA_HOME, training_records + validation_records)
@@ -374,5 +403,5 @@ def test():
   print(y)
 
 
-lstm_runner()
+bilstm_runner()
 # compute_output_metrics("3nn")

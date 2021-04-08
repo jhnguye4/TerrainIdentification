@@ -56,6 +56,11 @@ class BaseModel:
     y_pred = self.model.predict(x)
     return f1_score(y, y_pred, average='weighted')
 
+  def save(self, file_path):
+    parent_folder = cache.get_parent_folder(file_path)
+    cache.mkdir(parent_folder)
+    self.model.save(file_path)
+
 class LogReg(BaseModel):
   def __init__(self, x, y, max_iter=1000):
     BaseModel.__init__(self, x, y)
@@ -110,14 +115,54 @@ class SimpleLSTM(BaseModel):
     self.model.fit(self.x, self.y, sample_weight=self.sample_weights, batch_size=self.batch_size, epochs=self.epochs,
                    validation_data=validation_data, validation_batch_size=self.batch_size)
 
-  def save(self, file_path):
-    parent_folder = cache.get_parent_folder(file_path)
-    cache.mkdir(parent_folder)
-    self.model.save(file_path)
-
   @staticmethod
   def load(file_path):
     lstm = SimpleLSTM()
+    lstm.model = load_model(file_path)
+    lstm.model.summary()
+    return lstm
+
+
+class BiDirectionalLSTM(BaseModel):
+  def __init__(self, train=None, valid=None,
+               sample_window=None, n_features=None, n_classes=None,
+               batch_size=32, epochs=10,
+               optimizer=Adam(), name=None):
+
+
+    if train:
+      BaseModel.__init__(self, train[0], train[1])
+    else:
+      BaseModel.__init__(self, None, None)
+    self.name = "Simple LSTM" if name is None else self.name
+    self.n_classes = n_classes
+    self.sample_weights = train[2] if train else None
+    self.valid_x = valid[0] if valid else None
+    self.valid_y = valid[1] if valid else None
+    self.valid_weights = valid[2] if valid else None
+    self.batch_size = batch_size
+    self.epochs = epochs
+    if sample_window:
+      self.model = Sequential()
+      self.model.add(Bidirectional(LSTM(128, activation='relu', return_sequences=True, input_shape=(sample_window, n_features))))
+      self.model.add(TimeDistributed(Dense(64, activation='relu')))
+      self.model.add(Flatten())
+      self.model.add(Dense(64, activation='relu'))
+      self.model.add(Dropout(0.5))
+      self.model.add(Dense(n_classes, activation='softmax'))
+      self.model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['categorical_accuracy'])
+    else:
+      self.model = None
+
+  def fit(self):
+    validation_data = (self.valid_x, self.valid_y, self.valid_weights) if self.valid_weights is not None else (
+    self.valid_x, self.valid_y)
+    self.model.fit(self.x, self.y, sample_weight=self.sample_weights, batch_size=self.batch_size, epochs=self.epochs,
+                   validation_data=validation_data, validation_batch_size=self.batch_size)
+
+  @staticmethod
+  def load(file_path):
+    lstm = BiDirectionalLSTM()
     lstm.model = load_model(file_path)
     lstm.model.summary()
     return lstm
