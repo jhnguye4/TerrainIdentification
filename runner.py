@@ -481,6 +481,8 @@ def test():
 # compute_output_metrics(
 #   "/Users/panzer/NCSU/Neural Networks/Competition/TerrainIdentification/models/successful_lstm_60.mdl", "60")
 
+successful_runner("1")
+successful_runner("2")
 successful_runner("4")
 successful_runner("6")
 successful_runner("10")
