@@ -216,16 +216,16 @@ def plot_optimal_k():
 
 
 def plot_data_splits():
-  train_valid_split_png = os.path.join("results", "train_valid_split.png")
+  train_valid_test_split_png = os.path.join("results", "train_valid_test_split.png")
   def autolabel(rects):
     """Attach a text label above each bar in *rects*, displaying its height."""
     for rect in rects:
       height = rect.get_height()
       ax.annotate('{}'.format(height),
                   xy=(rect.get_x() + rect.get_width() / 2, height),
-                  xytext=(0, 3),  # 3 points vertical offset
+                  xytext=(0, 0),  # 3 points vertical offset
                   textcoords="offset points",
-                  ha='center', va='bottom')
+                  ha='center', va='bottom', rotation=45, fontsize=10)
 
   sampling_rate = sampling_rates["4"]
   training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
@@ -236,30 +236,40 @@ def plot_data_splits():
   validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=True,
                                               class_balancer=None, batch_size=1)
   valid_y = validation_stream.labels
+  test_data_files = data_utils.get_data_files(DATA_HOME, test_records)
+  test_stream = data_utils.DataStreamer(test_data_files, sample_deltas=sampling_rate, do_shuffle=True,
+                                              class_balancer=None, batch_size=1)
+  test_y = test_stream.labels
   train_counter = Counter(train_y)
   valid_counter = Counter(valid_y)
+  test_counter = Counter(test_y)
   labels = sorted(train_counter.keys())
-  train_counts, valid_counts = [], []
+  train_counts, valid_counts, test_counts = [], [], []
   for label in labels:
     train_counts.append(train_counter[label])
     valid_counts.append(valid_counter[label])
+    test_counts.append(test_counter[label])
   x = np.arange(len(labels))  # the label locations
-  width = 0.35  # the width of the bars
+  width = 0.25  # the width of the bars
   fig, ax = plt.subplots()
-  rects1 = ax.bar(x - width / 2, train_counts, width, label='Training')
-  rects2 = ax.bar(x + width / 2, valid_counts, width, label='Validation')
-  ax.set_ylabel('Label')
+  rects1 = ax.bar(x - 4*width / 3, train_counts, width, label='Training')
+  rects2 = ax.bar(x - width / 3, valid_counts, width, label='Validation')
+  rects3 = ax.bar(x + 2*width / 3, test_counts, width, label='Testing')
+  ax.set_ylabel('Class count')
   ax.set_yscale('log')
-  ax.set_title('Frequency of label in training and validation sets')
+  ax.set_ylabel('# Classes')
   ax.set_xticks(x)
   ax.set_xticklabels(labels)
+  ax.set_xlabel('Class labels')
+  ax.set_title('Frequency of label in training, validation and testing sets')
   ax.legend()
   autolabel(rects1)
   autolabel(rects2)
+  autolabel(rects3)
   fig.tight_layout()
-  plt.savefig(train_valid_split_png)
+  plt.savefig(train_valid_test_split_png)
   plt.clf()
-  LOGGER.info("Chart saved in '%s'" % train_valid_split_png)
+  LOGGER.info("Chart saved in '%s'" % train_valid_test_split_png)
 
 
 def output_predicted():
@@ -468,8 +478,12 @@ def test():
   print(x)
   print(y)
 
+# compute_output_metrics(
+#   "/Users/panzer/NCSU/Neural Networks/Competition/TerrainIdentification/models/successful_lstm_60.mdl", "60")
 
-successful_runner("60")
+successful_runner("4")
+successful_runner("6")
+successful_runner("10")
 # compute_output_metrics("/Users/panzer/NCSU/Neural Networks/Competition/TerrainIdentification/models/successful_lstm_30.mdl", "30")
 # bilstm_runner()
 # compute_output_metrics("3nn")
