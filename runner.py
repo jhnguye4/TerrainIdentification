@@ -282,27 +282,47 @@ def output_predicted():
   data_utils.dump_labels_to_csv(y_predicted, test_file_path)
 
 
-def compute_output_metrics(model_name):
-  sampling_rate = sampling_rates["4"]
-  test_file_path = os.path.join("results", "%s_prediction.csv" % model_name)
-  y_predicted = list(map(int, data_utils.read_csv_file(test_file_path, as_singles=True)))
-  validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
-  validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=False,
-                                              class_balancer=None, batch_size=1)
-  valid_y = list(map(int, validation_stream.labels))
-  print(y_predicted[:10])
-  print(valid_y[:10])
-  labels = [0,1,2,3]
-  print(metrics.precision_recall_fscore_support(valid_y, y_predicted, labels=labels))
-  print(metrics.precision_recall_fscore_support(valid_y, y_predicted, labels=labels, average="weighted"))
-  cm = metrics.confusion_matrix(valid_y, y_predicted, labels=labels, normalize='true')
-  disp = metrics.ConfusionMatrixDisplay(cm)
+# def compute_output_metrics(model_name):
+#   sampling_rate = sampling_rates["4"]
+#   test_file_path = os.path.join("results", "%s_prediction.csv" % model_name)
+#   y_predicted = list(map(int, data_utils.read_csv_file(test_file_path, as_singles=True)))
+#   validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+#   validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+#                                               class_balancer=None, batch_size=1)
+#   valid_y = list(map(int, validation_stream.labels))
+#   print(y_predicted[:10])
+#   print(valid_y[:10])
+#   labels = [0,1,2,3]
+#   print(metrics.precision_recall_fscore_support(valid_y, y_predicted, labels=labels))
+#   print(metrics.precision_recall_fscore_support(valid_y, y_predicted, labels=labels, average="weighted"))
+#   cm = metrics.confusion_matrix(valid_y, y_predicted, labels=labels, normalize='true')
+#   disp = metrics.ConfusionMatrixDisplay(cm)
+#
+#   cm_plt = disp.plot(include_values=True, cmap=plt.cm.Blues, colorbar=True)
+#   cm_plt_path = os.path.join("results", "%s_cm.png" % model_name)
+#   plt.grid(False)
+#   plt.savefig(cm_plt_path)
+#   print("Accuracy Score: %f" % metrics.accuracy_score(valid_y, y_predicted))
 
+
+
+def compute_output_metrics(model_path, sample_rate_key, n_classes=4):
+  sampling_rate = sampling_rates[sample_rate_key]
+  testing_data_file = data_utils.get_data_files(DATA_HOME, test_records, skip_y=False)
+  testing_stream = data_utils.DataStreamer(testing_data_file, sample_deltas=sampling_rate, do_shuffle=False)
+  model = model_utils.SuccessfulLSTM.load(model_path)
+  test_x, test_y, test_sample_weights = testing_stream.preprocess(n_classes)
+  y_predicted = model.predict(test_x)
+  test_y = list(map(int, testing_stream.labels))
+  labels = [0, 1, 2, 3]
+  cm = metrics.confusion_matrix(test_y, y_predicted, labels=labels, normalize='true')
+  disp = metrics.ConfusionMatrixDisplay(cm)
   cm_plt = disp.plot(include_values=True, cmap=plt.cm.Blues, colorbar=True)
-  cm_plt_path = os.path.join("results", "%s_cm.png" % model_name)
+  cm_plt_path = os.path.join("results", "%s_cm.png" % cache.get_file_name(model_path))
   plt.grid(False)
   plt.savefig(cm_plt_path)
-  print("Accuracy Score: %f" % metrics.accuracy_score(valid_y, y_predicted))
+  print("Accuracy Score: %f" % metrics.accuracy_score(test_y, y_predicted))
+  print("F1 Score: %f" % metrics.f1_score(test_y, y_predicted, average="weighted"))
 
 
 def preview_data_features():
@@ -366,14 +386,16 @@ def lstm_runner():
 
 
 def bilstm_runner():
-  for sample_rate_key in ["4", "6", "10", "30", "60"]:
+  ranges = ["4", "6", "10", "30", "60"]
+  ranges = ["30"]
+  for sample_rate_key in ranges:
     LOGGER.info("Processing for window size = %s" % sample_rate_key)
     model_path = os.path.join("models/bi_lstm_%s.mdl" % sample_rate_key)
     if cache.file_exists(model_path):
       model_utils.BiDirectionalLSTM.load(model_path)
       continue
     batch_size = 32
-    n_epochs = 20
+    n_epochs = 10
     sampling_rate = sampling_rates[sample_rate_key]
     # balancer = data_utils.OverSampler()
     balancer = None
@@ -393,6 +415,50 @@ def bilstm_runner():
     lstm.save(model_path)
 
 
+def successful_runner(sample_rate_key):
+  LOGGER.info("Processing for window size = %s" % sample_rate_key)
+  model_path = os.path.join("models/successful_lstm_%s.mdl" % sample_rate_key)
+  if cache.file_exists(model_path):
+    model_utils.SuccessfulLSTM.load(model_path)
+    return
+  batch_size = 100
+  n_epochs = 10
+  sampling_rate = sampling_rates[sample_rate_key]
+  # balancer = data_utils.OverSampler()
+  balancer = None
+  training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+  training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                            class_balancer=balancer, batch_size=1)
+  train_x, train_y, train_sample_weights = training_stream.preprocess()
+  validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+  validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                              class_balancer=None, batch_size=1)
+  valid_x, valid_y, valid_sample_weights = validation_stream.preprocess(n_classes=len(training_stream.classes))
+  lstm = model_utils.SuccessfulLSTM((train_x, train_y, train_sample_weights),
+                                       (valid_x, valid_y, valid_sample_weights),
+                                       sampling_rate.window_size, training_stream.n_features,
+                                       len(training_stream.classes), batch_size=batch_size, epochs=n_epochs)
+  lstm.fit()
+  lstm.model.summary()
+  lstm.save(model_path)
+
+
+
+def model_predictor(sample_rate_key):
+  sampling_rate = sampling_rates[sample_rate_key]
+  model_path = os.path.join("models/successful_lstm_%s.mdl" % sample_rate_key)
+  model = model_utils.BiDirectionalLSTM.load(model_path)
+  for test_record in test_records:
+    LOGGER.info("Predicting for '%s' ... " % test_record)
+    testing_data_file = data_utils.get_data_files(TEST_HOME, [test_record], skip_y=True)
+    testing_stream = data_utils.DataStreamer(testing_data_file, sample_deltas=sampling_rate, do_shuffle=False)
+    test_x = testing_stream.features
+    y_predicted = model.predict(test_x)
+    test_file_path = os.path.join(TEST_HOME, "%sy_prediction.csv" % test_record)
+    data_utils.dump_labels_to_csv(y_predicted, test_file_path)
+
+
+
 def test():
   sampling_rate = sampling_rates["4"]
   data_files = data_utils.get_data_files(DATA_HOME, training_records + validation_records)
@@ -403,5 +469,7 @@ def test():
   print(y)
 
 
-bilstm_runner()
+successful_runner("60")
+# compute_output_metrics("/Users/panzer/NCSU/Neural Networks/Competition/TerrainIdentification/models/successful_lstm_30.mdl", "30")
+# bilstm_runner()
 # compute_output_metrics("3nn")

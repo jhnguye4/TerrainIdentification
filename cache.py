@@ -34,3 +34,11 @@ def mkdir(directory):
     except OSError as e:
       if e.errno != os.errno.EEXIST:
         raise
+
+def get_file_name(file_path):
+  """
+  Return name of the file from the path
+  :param file_path: Path of the file
+  :return: Name of the file
+  """
+  return file_path.rsplit(os.path.sep, 1)[-1].split(".", 1)[0]
