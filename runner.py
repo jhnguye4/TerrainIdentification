@@ -27,6 +27,11 @@ DATA_HOME = properties.DATA_HOME
 TEST_HOME = properties.TEST_HOME
 LOGGER = logger.get_logger(os.path.basename(__file__.split(".")[0]))
 
+import tensorflow as tf
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
+
 
 training_records = [
                     "subject_001_01__", "subject_001_02__", "subject_001_03__", "subject_001_04__", "subject_001_05__", "subject_001_06__", "subject_001_07__",
@@ -215,7 +220,7 @@ def plot_optimal_k():
   plt.clf()
 
 
-def plot_data_splits():
+def plot_data_splits(sampling_rate_key):
   train_valid_test_split_png = os.path.join("results", "train_valid_test_split.png")
   def autolabel(rects):
     """Attach a text label above each bar in *rects*, displaying its height."""
@@ -227,7 +232,7 @@ def plot_data_splits():
                   textcoords="offset points",
                   ha='center', va='bottom', rotation=45, fontsize=10)
 
-  sampling_rate = sampling_rates["4"]
+  sampling_rate = sampling_rates[sampling_rate_key]
   training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
   training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=True,
                                             class_balancer=None, batch_size=1)
@@ -292,47 +297,45 @@ def output_predicted():
   data_utils.dump_labels_to_csv(y_predicted, test_file_path)
 
 
-# def compute_output_metrics(model_name):
-#   sampling_rate = sampling_rates["4"]
-#   test_file_path = os.path.join("results", "%s_prediction.csv" % model_name)
-#   y_predicted = list(map(int, data_utils.read_csv_file(test_file_path, as_singles=True)))
-#   validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
-#   validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=False,
-#                                               class_balancer=None, batch_size=1)
-#   valid_y = list(map(int, validation_stream.labels))
-#   print(y_predicted[:10])
-#   print(valid_y[:10])
-#   labels = [0,1,2,3]
-#   print(metrics.precision_recall_fscore_support(valid_y, y_predicted, labels=labels))
-#   print(metrics.precision_recall_fscore_support(valid_y, y_predicted, labels=labels, average="weighted"))
-#   cm = metrics.confusion_matrix(valid_y, y_predicted, labels=labels, normalize='true')
-#   disp = metrics.ConfusionMatrixDisplay(cm)
-#
-#   cm_plt = disp.plot(include_values=True, cmap=plt.cm.Blues, colorbar=True)
-#   cm_plt_path = os.path.join("results", "%s_cm.png" % model_name)
-#   plt.grid(False)
-#   plt.savefig(cm_plt_path)
-#   print("Accuracy Score: %f" % metrics.accuracy_score(valid_y, y_predicted))
-
-
-
-def compute_output_metrics(model_path, sample_rate_key, n_classes=4):
+def compute_output_metrics(mdl_name, sample_rate_key, n_classes=4, do_weight=False, hidden_units=None):
+  def fmt(vals):
+    _fmt = "%0.4f"
+    if isinstance(vals, list) or isinstance(vals, np.ndarray):
+      return list(map(lambda a: _fmt % a, vals))
+    return _fmt % vals
+  print("\n## Model Name: %s; Sample Rate: %s" % (mdl_name, sample_rate_key) )
+  mdl = model_utils.BaseModel.get_class(mdl_name)
+  inst = mdl()
+  key = inst.get_key()
+  if hidden_units is not None:
+    key = "%s_h-%d" % (key, hidden_units)
+  model_path = os.path.join("models", "%s_%s.mdl" % (key, sample_rate_key))
   sampling_rate = sampling_rates[sample_rate_key]
-  testing_data_file = data_utils.get_data_files(DATA_HOME, test_records, skip_y=False)
-  testing_stream = data_utils.DataStreamer(testing_data_file, sample_deltas=sampling_rate, do_shuffle=False)
-  model = model_utils.SuccessfulLSTM.load(model_path)
-  test_x, test_y, test_sample_weights = testing_stream.preprocess(n_classes)
-  y_predicted = model.predict(test_x)
-  test_y = list(map(int, testing_stream.labels))
-  labels = [0, 1, 2, 3]
-  cm = metrics.confusion_matrix(test_y, y_predicted, labels=labels, normalize='true')
-  disp = metrics.ConfusionMatrixDisplay(cm)
-  cm_plt = disp.plot(include_values=True, cmap=plt.cm.Blues, colorbar=True)
-  cm_plt_path = os.path.join("results", "%s_cm.png" % cache.get_file_name(model_path))
-  plt.grid(False)
-  plt.savefig(cm_plt_path)
-  print("Accuracy Score: %f" % metrics.accuracy_score(test_y, y_predicted))
-  print("F1 Score: %f" % metrics.f1_score(test_y, y_predicted, average="weighted"))
+  datasets = [("train", training_records), ("valid", validation_records), ("test", test_records)]
+  model = mdl.load(model_path)
+  parent_folder = os.path.join("results", cache.get_file_name(model_path))
+  cache.mkdir(parent_folder)
+  for dataset, data_records in datasets[::-1]:
+    print("#### %s"% dataset.upper())
+    dataset_files = data_utils.get_data_files(DATA_HOME, data_records, skip_y=False)
+    dataset_stream = data_utils.DataStreamer(dataset_files, sample_deltas=sampling_rate, do_shuffle=False)
+    x, y, sample_weights = dataset_stream.preprocess(n_classes)
+    y_predicted = list(model.predict(x))
+    y_actual = list(map(int, dataset_stream.labels))
+    labels = list(range(n_classes))
+    cm = metrics.confusion_matrix(y_actual, y_predicted, labels=labels, normalize='true')
+    disp = metrics.ConfusionMatrixDisplay(cm)
+    cm_plt = disp.plot(include_values=True, cmap=plt.cm.Blues, colorbar=True)
+    cm_plt_path = os.path.join(parent_folder, "cm_%s.png" % dataset)
+    plt.grid(False)
+    plt.savefig(cm_plt_path)
+    plt.clf()
+    average = "weighted" if do_weight else None
+    print("%10s: %s" % ("Accuracy", fmt(metrics.accuracy_score(y_actual, y_predicted))))
+    print("%10s: %s" % ("Precision", fmt(metrics.precision_score(y_actual, y_predicted, labels=labels, average=average))))
+    print("%10s: %s" % ("Recall", fmt(metrics.recall_score(y_actual, y_predicted, labels=labels, average=average))))
+    print("%10s: %s" % ("F1", fmt(metrics.f1_score(y_actual, y_predicted, labels=labels, average=average))))
+
 
 
 def preview_data_features():
@@ -394,10 +397,8 @@ def lstm_runner():
     lstm.save(model_path)
 
 
-
 def bilstm_runner():
   ranges = ["4", "6", "10", "30", "60"]
-  ranges = ["30"]
   for sample_rate_key in ranges:
     LOGGER.info("Processing for window size = %s" % sample_rate_key)
     model_path = os.path.join("models/bi_lstm_%s.mdl" % sample_rate_key)
@@ -453,6 +454,40 @@ def successful_runner(sample_rate_key):
   lstm.save(model_path)
 
 
+def variational_runner(sample_rate_key, hidden_units):
+  LOGGER.info("Processing for window size = %s" % sample_rate_key)
+  model_path = os.path.join("models/variational_lstm_h-%d_%s.mdl" % (hidden_units, sample_rate_key))
+  if cache.file_exists(model_path):
+    model_utils.VariationalLSTM.load(model_path)
+    return
+  batch_size = 100
+  n_epochs = 10
+  sampling_rate = sampling_rates[sample_rate_key]
+  # balancer = data_utils.OverSampler()
+  balancer = None
+  training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+  training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                            class_balancer=balancer, batch_size=1)
+  train_x, train_y, train_sample_weights = training_stream.preprocess()
+  validation_data_files = data_utils.get_data_files(DATA_HOME, validation_records)
+  validation_stream = data_utils.DataStreamer(validation_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                              class_balancer=None, batch_size=1)
+  valid_x, valid_y, valid_sample_weights = validation_stream.preprocess(n_classes=len(training_stream.classes))
+  lstm = model_utils.VariationalLSTM((train_x, train_y, train_sample_weights),
+                                    (valid_x, valid_y, valid_sample_weights),
+                                    sampling_rate.window_size, training_stream.n_features,
+                                    len(training_stream.classes), batch_size=batch_size, epochs=n_epochs, hidden_layer=hidden_units)
+  lstm.fit()
+  lstm.model.summary()
+  lstm.save(model_path)
+
+
+
+def run_compute_output_metrics_for_sample_rates(mdl_name, sample_rates=("1", "2", "4", "6", "10", "30", "60")):
+  for sample_rate in sorted(sample_rates, key=lambda x: int(x)):
+    compute_output_metrics(mdl_name, sample_rate)
+
+
 
 def model_predictor(sample_rate_key):
   sampling_rate = sampling_rates[sample_rate_key]
@@ -469,23 +504,15 @@ def model_predictor(sample_rate_key):
 
 
 
-def test():
-  sampling_rate = sampling_rates["4"]
-  data_files = data_utils.get_data_files(DATA_HOME, training_records + validation_records)
-  stream = data_utils.DataStreamer(data_files, sample_deltas=sampling_rate, do_shuffle=False,
-                                   class_balancer=None, batch_size=1)
-  x, y = stream.preprocess()
-  print(x)
-  print(y)
-
-# compute_output_metrics(
-#   "/Users/panzer/NCSU/Neural Networks/Competition/TerrainIdentification/models/successful_lstm_60.mdl", "60")
-
-successful_runner("1")
-successful_runner("2")
-successful_runner("4")
-successful_runner("6")
-successful_runner("10")
+# run_compute_output_metrics_for_sample_rates("SuccessfulLSTM", ["60"])
+variational_runner("60", 32)
+variational_runner("60", 64)
+variational_runner("60", 128)
+# successful_runner("1")
+# successful_runner("2")
+# successful_runner("4")
+# successful_runner("6")
+# successful_runner("10")
 # compute_output_metrics("/Users/panzer/NCSU/Neural Networks/Competition/TerrainIdentification/models/successful_lstm_30.mdl", "30")
 # bilstm_runner()
 # compute_output_metrics("3nn")

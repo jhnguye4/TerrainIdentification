@@ -155,7 +155,7 @@ class DataStreamer:
     feature_times = []
     self.labels = []
     label_times = []
-    LOGGER.info("Loading data from files .... ")
+    # LOGGER.info("Loading data from files .... ")
     for file_index, x_file_path in enumerate(self.x_files):
       features = read_csv_file(x_file_path)
       self.n_features = len(features[0])
@@ -210,7 +210,7 @@ class DataStreamer:
       self.classes = sorted(cntr.keys())
       self.sample_weights = class_weight.compute_sample_weight("balanced", y=self.labels)
       self.class_weights = class_weight.compute_class_weight("balanced", classes=self.classes, y=self.labels)
-      LOGGER.info("Sampling data: %s" % Counter(self.labels))
+      # LOGGER.info("Sampling data: %s" % Counter(self.labels))
 
   def next(self):
     feature_samples = self.features[self.index : self.index + self.batch_size]
