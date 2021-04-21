@@ -8,6 +8,7 @@ sys.dont_write_bytecode = True
 __author__ = "bigfatnoob"
 
 
+import argparse
 import csv
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -297,7 +298,7 @@ def output_predicted():
   data_utils.dump_labels_to_csv(y_predicted, test_file_path)
 
 
-def compute_output_metrics(mdl_name, sample_rate_key, n_classes=4, do_weight=False, hidden_units=None):
+def compute_output_metrics(mdl_name, sample_rate_key, n_classes=4, do_weight=False, hidden_units=None, only_test=False):
   def fmt(vals):
     _fmt = "%0.4f"
     if isinstance(vals, list) or isinstance(vals, np.ndarray):
@@ -311,11 +312,14 @@ def compute_output_metrics(mdl_name, sample_rate_key, n_classes=4, do_weight=Fal
     key = "%s_h-%d" % (key, hidden_units)
   model_path = os.path.join("models", "%s_%s.mdl" % (key, sample_rate_key))
   sampling_rate = sampling_rates[sample_rate_key]
-  datasets = [("train", training_records), ("valid", validation_records), ("test", test_records)]
+  if only_test:
+    datasets = [("test", test_records)]
+  else:
+    datasets = [("train", training_records), ("valid", validation_records), ("test", test_records)]
   model = mdl.load(model_path)
   parent_folder = os.path.join("results", cache.get_file_name(model_path))
   cache.mkdir(parent_folder)
-  for dataset, data_records in datasets[::-1]:
+  for dataset, data_records in datasets:
     print("#### %s"% dataset.upper())
     dataset_files = data_utils.get_data_files(DATA_HOME, data_records, skip_y=False)
     dataset_stream = data_utils.DataStreamer(dataset_files, sample_deltas=sampling_rate, do_shuffle=False)
@@ -331,10 +335,10 @@ def compute_output_metrics(mdl_name, sample_rate_key, n_classes=4, do_weight=Fal
     plt.savefig(cm_plt_path)
     plt.clf()
     average = "weighted" if do_weight else None
-    print("%10s: %s" % ("Accuracy", fmt(metrics.accuracy_score(y_actual, y_predicted))))
     print("%10s: %s" % ("Precision", fmt(metrics.precision_score(y_actual, y_predicted, labels=labels, average=average))))
     print("%10s: %s" % ("Recall", fmt(metrics.recall_score(y_actual, y_predicted, labels=labels, average=average))))
     print("%10s: %s" % ("F1", fmt(metrics.f1_score(y_actual, y_predicted, labels=labels, average=average))))
+    print("%10s: %s" % ("Accuracy", fmt(metrics.accuracy_score(y_actual, y_predicted))))
 
 
 
@@ -454,6 +458,113 @@ def successful_runner(sample_rate_key):
   lstm.save(model_path)
 
 
+def logistic_regeression_runner(sample_rate_key):
+  model_path = os.path.join("models/log_reg_%s.mdl" % sample_rate_key)
+  if cache.file_exists(model_path):
+    return model_utils.LogReg.load(model_path)
+  LOGGER.info("Processing for window size = %s" % sample_rate_key)
+  sampling_rate = sampling_rates[sample_rate_key]
+  training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+  training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                            class_balancer=None, batch_size=1)
+  train_x = training_stream.features
+  train_y = training_stream.labels
+  class_weights = {lbl:cw for lbl, cw in zip(training_stream.classes, training_stream.class_weights)}
+  log_reg = model_utils.LogReg(train_x, train_y, class_weights)
+  log_reg.fit()
+  log_reg.save(model_path)
+  return log_reg
+
+
+def log_reg_predictor(sample_rate_key):
+  LOGGER.info("Processing for window size = %s" % sample_rate_key)
+  model = logistic_regeression_runner(sample_rate_key)
+  sampling_rate = sampling_rates[sample_rate_key]
+  datasets = [("train", training_records), ("valid", validation_records), ("test", test_records)]
+  for dataset, data_records in datasets:
+    print("#### %s" % dataset.upper())
+    dataset_files = data_utils.get_data_files(DATA_HOME, data_records, skip_y=False)
+    dataset_stream = data_utils.DataStreamer(dataset_files, sample_deltas=sampling_rate, do_shuffle=False)
+    x = dataset_stream.features
+    y_actual = dataset_stream.labels
+    y_predicted = list(model.predict(x))
+    print("%10s: %0.4f" % ("Precision", metrics.precision_score(y_actual, y_predicted, average="weighted")))
+    print("%10s: %0.4f" % ("Recall", metrics.recall_score(y_actual, y_predicted, average="weighted")))
+    print("%10s: %0.4f" % ("F1", metrics.f1_score(y_actual, y_predicted, average="weighted")))
+    print("%10s: %0.4f" % ("Accuracy", metrics.accuracy_score(y_actual, y_predicted)))
+
+
+def naive_bayes_runner(sample_rate_key):
+  model_path = os.path.join("models/naive_bayes_%s.mdl" % sample_rate_key)
+  if cache.file_exists(model_path):
+    return model_utils.NaiveBayes.load(model_path)
+  LOGGER.info("Processing for window size = %s" % sample_rate_key)
+  sampling_rate = sampling_rates[sample_rate_key]
+  training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+  training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                            class_balancer=None, batch_size=1)
+  train_x = training_stream.features
+  train_y = training_stream.labels
+  sample_weights = training_stream.sample_weights
+  naive_bayes = model_utils.NaiveBayes(train_x, train_y, sample_weights)
+  naive_bayes.fit()
+  naive_bayes.save(model_path)
+  return naive_bayes
+
+def naive_bayes_predictor(sample_rate_key):
+  LOGGER.info("Processing for window size = %s" % sample_rate_key)
+  model = naive_bayes_runner(sample_rate_key)
+  sampling_rate = sampling_rates[sample_rate_key]
+  datasets = [("train", training_records), ("valid", validation_records), ("test", test_records)]
+  for dataset, data_records in datasets:
+    print("#### %s" % dataset.upper())
+    dataset_files = data_utils.get_data_files(DATA_HOME, data_records, skip_y=False)
+    dataset_stream = data_utils.DataStreamer(dataset_files, sample_deltas=sampling_rate, do_shuffle=False)
+    x = dataset_stream.features
+    y_actual = dataset_stream.labels
+    y_predicted = list(model.predict(x))
+    print("%10s: %0.4f" % ("Precision", metrics.precision_score(y_actual, y_predicted, average="weighted")))
+    print("%10s: %0.4f" % ("Recall", metrics.recall_score(y_actual, y_predicted, average="weighted")))
+    print("%10s: %0.4f" % ("F1", metrics.f1_score(y_actual, y_predicted, average="weighted")))
+    print("%10s: %0.4f" % ("Accuracy", metrics.accuracy_score(y_actual, y_predicted)))
+
+
+def nn3_runner(sample_rate_key):
+  model_path = os.path.join("models/3nn_%s.mdl" % sample_rate_key)
+  if cache.file_exists(model_path):
+    return model_utils.KNN.load(model_path)
+  LOGGER.info("Processing for window size = %s" % sample_rate_key)
+  sampling_rate = sampling_rates[sample_rate_key]
+  training_data_files = data_utils.get_data_files(DATA_HOME, training_records)
+  training_stream = data_utils.DataStreamer(training_data_files, sample_deltas=sampling_rate, do_shuffle=False,
+                                            class_balancer=None, batch_size=1)
+  train_x = training_stream.features
+  train_y = training_stream.labels
+  naive_bayes = model_utils.KNN(train_x, train_y, k=3)
+  naive_bayes.fit()
+  naive_bayes.save(model_path)
+  return naive_bayes
+
+
+def nn3_predictor(sample_rate_key):
+  LOGGER.info("Processing for window size = %s" % sample_rate_key)
+  model = nn3_runner(sample_rate_key)
+  sampling_rate = sampling_rates[sample_rate_key]
+  datasets = [("train", training_records), ("valid", validation_records), ("test", test_records)]
+  datasets = [("test", test_records)]
+  for dataset, data_records in datasets:
+    print("#### %s" % dataset.upper())
+    dataset_files = data_utils.get_data_files(DATA_HOME, data_records, skip_y=False)
+    dataset_stream = data_utils.DataStreamer(dataset_files, sample_deltas=sampling_rate, do_shuffle=False)
+    x = dataset_stream.features
+    y_actual = dataset_stream.labels
+    y_predicted = list(model.predict(x))
+    print("%10s: %0.4f" % ("Precision", metrics.precision_score(y_actual, y_predicted, average="weighted")))
+    print("%10s: %0.4f" % ("Recall", metrics.recall_score(y_actual, y_predicted, average="weighted")))
+    print("%10s: %0.4f" % ("F1", metrics.f1_score(y_actual, y_predicted, average="weighted")))
+    print("%10s: %0.4f" % ("Accuracy", metrics.accuracy_score(y_actual, y_predicted)))
+
+
 def variational_runner(sample_rate_key, hidden_units):
   LOGGER.info("Processing for window size = %s" % sample_rate_key)
   model_path = os.path.join("models/variational_lstm_h-%d_%s.mdl" % (hidden_units, sample_rate_key))
@@ -483,9 +594,14 @@ def variational_runner(sample_rate_key, hidden_units):
 
 
 
-def run_compute_output_metrics_for_sample_rates(mdl_name, sample_rates=("1", "2", "4", "6", "10", "30", "60")):
+def run_compute_output_metrics_for_sample_rates(mdl_name, sample_rates=("1", "2", "4", "6", "10", "30", "60"), do_weight=False):
   for sample_rate in sorted(sample_rates, key=lambda x: int(x)):
-    compute_output_metrics(mdl_name, sample_rate)
+    compute_output_metrics(mdl_name, sample_rate, do_weight=do_weight)
+
+def run_compute_output_metrics_for_hidden_layers(mdl_name, sample_rate_key="60", hidden_layers=(32, 64, 128), do_weight=False):
+  for hidden_units in hidden_layers:
+    print("## Hidden Units", hidden_units)
+    compute_output_metrics(mdl_name, sample_rate_key, do_weight=do_weight, hidden_units=hidden_units, only_test=True)
 
 
 
@@ -503,11 +619,33 @@ def model_predictor(sample_rate_key):
     data_utils.dump_labels_to_csv(y_predicted, test_file_path)
 
 
+def main():
+  parser = argparse.ArgumentParser(description="Process LSTM based models.")
+  parser.add_argument('--mode', action='store', type=str, help="Mode: train / predict", required=True)
+  parser.add_argument('--window', action='store', type=int, help="Sampling window size: 1, 4, 6, 10, 30, 60", required=True)
+  args = parser.parse_args()
+  mode = args.mode.lower().strip()
+  window = args.window
+  if mode == "train":
+    successful_runner(str(window))
+  elif mode == "predict":
+    compute_output_metrics("SuccessfulLSTM", str(window))
+  else:
+    print("Unsupported mode: '%s'. Mode can be 'train' or 'predict'" % mode)
 
-# run_compute_output_metrics_for_sample_rates("SuccessfulLSTM", ["60"])
-variational_runner("60", 32)
-variational_runner("60", 64)
-variational_runner("60", 128)
+main()
+
+
+# log_reg_predictor("4")
+# logistic_regeression_runner("4")
+# naive_bayes_predictor("4")
+# naive_bayes_runner("4")
+# nn3_predictor("4")
+# run_compute_output_metrics_for_sample_rates("SuccessfulLSTM", do_weight=True)
+# run_compute_output_metrics_for_hidden_layers("VariationalLSTM", do_weight=True)
+# variational_runner("60", 32)
+# variational_runner("60", 64)
+# variational_runner("60", 128)
 # successful_runner("1")
 # successful_runner("2")
 # successful_runner("4")

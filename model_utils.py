@@ -69,13 +69,22 @@ class BaseModel:
     self.model.save(file_path)
 
 class LogReg(BaseModel):
-  def __init__(self, x, y, max_iter=1000):
+  def __init__(self, x, y, class_weights=None, max_iter=1000):
     BaseModel.__init__(self, x, y)
     self.name = "Logistic Regression"
-    self.model = LogisticRegression(max_iter=max_iter)
+    self.model = LogisticRegression(max_iter=max_iter, class_weight=class_weights)
 
   def get_key(self):
     return "log_reg"
+
+  def save(self, file_path):
+    cache.save_pickle(file_path, self.model)
+
+  @staticmethod
+  def load(file_path):
+    log_reg = LogReg(None, None)
+    log_reg.model = cache.load_pickle(file_path, verbose=True)
+    return log_reg
 
 
 class KNN(BaseModel):
@@ -87,15 +96,40 @@ class KNN(BaseModel):
   def get_key(self):
     return "%dnn" % self.k
 
+  def save(self, file_path):
+    cache.save_pickle(file_path, self.model)
+
+  @staticmethod
+  def load(file_path):
+    knn = KNN(None, None)
+    knn.model = cache.load_pickle(file_path, verbose=True)
+    return knn
+
 
 class NaiveBayes(BaseModel):
-  def __init__(self, x, y):
+  def __init__(self, x, y, sample_weights=None):
     BaseModel.__init__(self, x, y)
     self.name = "Naive Bayes"
+    self.sample_weights = sample_weights
     self.model = GaussianNB()
 
   def get_key(self):
     return "naive_bayes"
+
+  def fit(self):
+    x = BaseModel.merge(self.x)
+    LOGGER.info("Fitting %s model ... " % self.name)
+    self.model.fit(x, self.y, sample_weight=self.sample_weights)
+
+  def save(self, file_path):
+    cache.save_pickle(file_path, self.model)
+
+  @staticmethod
+  def load(file_path):
+    log_reg = NaiveBayes(None, None)
+    log_reg.model = cache.load_pickle(file_path)
+    return log_reg
+
 
 class SimpleLSTM(BaseModel):
   def __init__(self, train=None, valid=None,
@@ -199,8 +233,7 @@ class SuccessfulLSTM(BaseModel):
   def __init__(self, train=None, valid=None,
                sample_window=None, n_features=None, n_classes=None,
                batch_size=32, epochs=10,
-               optimizer=Adam(), hidden_layer=256, name=None):
-
+               optimizer=Adam(), hidden_layer=128, name=None):
     if train:
       BaseModel.__init__(self, train[0], train[1])
     else:
@@ -255,13 +288,16 @@ class VariationalLSTM(SuccessfulLSTM):
   def __init__(self, train=None, valid=None,
                sample_window=None, n_features=None, n_classes=None,
                batch_size=32, epochs=10,
-               optimizer=Adam(), hidden_layer=256, name=None):
+               optimizer=Adam(), hidden_layer=None, name=None):
     SuccessfulLSTM.__init__(self, train=train, valid=valid, sample_window=sample_window, n_features=n_features,
                             n_classes=n_classes, batch_size=batch_size, epochs=epochs, optimizer=optimizer,
                             hidden_layer=hidden_layer, name=name)
 
   def get_key(self):
-    return "variational_lstm_h-%d" % self.hidden_layers
+    if self.hidden_layers:
+      return "variational_lstm_h-%d" % self.hidden_layers
+    else:
+      return "variational_lstm"
 
   @staticmethod
   def load(file_path, summarize=False):
